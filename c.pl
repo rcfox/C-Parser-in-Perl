@@ -16,12 +16,15 @@ sub lexer {
 		$line =~ s/^\s//;
 		if($line =~ s/^(\[)//) {
 			$rec->read('lbracket',$1);
+			redo;
 		}
 		if($line =~ s/^(\])//) {
 			$rec->read('rbracket',$1);
+			redo;
 		}
 		if($line =~ s/^(,)//) {
 			$rec->read('comma',$1);
+			redo;
 		}
 		if($line =~ s/^(\W)//) {
 			$rec->read($1,$1);
@@ -122,7 +125,11 @@ sub action::struct_decl {
 	my @elements = @{$_[1]};
 	for(@elements) {
 		if(ref eq 'ARRAY') { # add pointers to the type
-			$struct{$_->[0]} = [@types, @{$_->[1]}];
+			if(ref $_->[0] eq 'ARRAY') { # add arrays to the type
+				$struct{$_->[0]->[0]} = [@types, @{$_->[1]}, @{$_->[0]->[1]}];
+			} else {
+				$struct{$_->[0]} = [@types, @{$_->[1]}];
+			}
 		} else {
 			$struct{$_} = [@types];
 		}
@@ -142,12 +149,18 @@ sub action::pointer_declarator {
 
 sub action::direct_declarator_array {
 	shift;
-	return [$_[0],["[$_[2]]"]];
+	my $name = $_[0];
+	my $size = ($_[2] eq ']' ? "[]" : "[$_[2]]");
+	my @sizes = ($size);
+	if(ref $name eq 'ARRAY') {
+		$name = $_[0]->[0];
+		unshift @sizes, @{$_[0]->[1]};
+	}
+	return [$name,[@sizes]];
 }
 
 
 sub action::function_definition {
-	#print Dumper(\@_);
 	shift;
 	return \@_;
 }
@@ -217,13 +230,13 @@ my $rules = [{ lhs => 'translation_unit', rhs => [qw/external_decl/], action => 
          { lhs => 'direct_declarator', rhs => [qw/id/], },
          { lhs => 'direct_declarator', rhs => [qw/( declarator )/], action => 'value2'},
          { lhs => 'direct_declarator', rhs => [qw/direct_declarator lbracket const_exp rbracket/], action => 'direct_declarator_array'},
-         { lhs => 'direct_declarator', rhs => [qw/direct_declarator lbracket rbracket/], },
+         { lhs => 'direct_declarator', rhs => [qw/direct_declarator lbracket rbracket/], action => 'direct_declarator_array'},
          { lhs => 'direct_declarator', rhs => [qw/direct_declarator ( param_type_list )/], },
          { lhs => 'direct_declarator', rhs => [qw/direct_declarator ( id_list )/], },
          { lhs => 'direct_declarator', rhs => [qw/direct_declarator ( )/], },
-         { lhs => 'pointer', rhs => [qw/* type_qualifier_list/], },
+         { lhs => 'pointer', rhs => [qw/* type_qualifier_list/], action => 'list'},
          { lhs => 'pointer', rhs => [qw/*/], },
-         { lhs => 'pointer', rhs => [qw/* type_qualifier_list pointer/], },
+         { lhs => 'pointer', rhs => [qw/* type_qualifier_list pointer/], action => 'list'},
          { lhs => 'pointer', rhs => [qw/* pointer/], action => 'list'},
          { lhs => 'type_qualifier_list', rhs => [qw/type_qualifier/], min => 1, action => 'list'},
          { lhs => 'param_type_list', rhs => [qw/param_list/], },
