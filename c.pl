@@ -44,7 +44,7 @@ sub lexer {
 		if($line =~ s/^(const|volatile)//) {
 			$rec->read('type_qualifier',$1);
 		}
-		if($line =~ s/^(void|char|short|int|long|float|double|signed|unsigned)//) {
+		if($line =~ s/^(void|char|short|int(?:\w+_t)?|long|float|double|signed|unsigned)//) {
 			$rec->read('type_spec',$1);
 		}
 		if($line =~ s/^(\w+)//) {
