@@ -120,8 +120,8 @@ sub action::struct_or_union_spec {
 		$name = "unnamed_$type$unnamed{$type}";
 		++$unnamed{$type};
 	}
-	$types{$type}{$name} = { $type => $name, elements => $_[$brace+1] };
-	return { $type => $name, elements => $_[$brace+1] };
+	$types{$type}{$name} = { name => $name, type => $type, elements => $_[$brace+1] };
+	return { name => $name, type => $type, elements => $_[$brace+1] };
 }
 
 sub action::enum_spec {
@@ -194,6 +194,13 @@ sub action::function_definition {
 	return \@_;
 }
 
+sub action::typedefd_name {
+	shift;
+	$_[1]->{name} = $_[2][0];
+	$types{$_[1]->{type}}{$_[1]->{name}} = $_[1];
+	return $_[1];
+}
+
 my $rules = [{ lhs => 'translation_unit', rhs => [qw/external_decl/], action => 'list'},
          { lhs => 'translation_unit', rhs => [qw/translation_unit external_decl/], action => 'list'},
          { lhs => 'external_decl', rhs => [qw/function_definition/], },
@@ -205,6 +212,7 @@ my $rules = [{ lhs => 'translation_unit', rhs => [qw/external_decl/], action => 
          { lhs => 'decl', rhs => [qw/decl_specs init_declarator_list ;/], },
          { lhs => 'decl', rhs => [qw/decl_specs ;/], },
          { lhs => 'decl_list', rhs => [qw/decl/], min => 1, action => 'list' },
+         { lhs => 'decl_specs', rhs => [qw/typedef type_spec type_name/], action => 'typedefd_name', rank => 1}, #special case
          { lhs => 'decl_specs', rhs => [qw/storage_class_spec decl_specs/], action => 'circular_sequence'},
          { lhs => 'decl_specs', rhs => [qw/storage_class_spec/], action => 'circular_sequence'},
          { lhs => 'decl_specs', rhs => [qw/type_spec decl_specs/], action => 'circular_sequence'},
@@ -413,10 +421,9 @@ my $grammar = Marpa::XS::Grammar->new({ start => 'translation_unit',
                                         default_action => 'value',
                                         rules   => $rules});
 
-
 $grammar->precompute();
 
-my $recce = Marpa::XS::Recognizer->new( { grammar => $grammar, trace_terminals => 0} );
+my $recce = Marpa::XS::Recognizer->new( { grammar => $grammar, trace_terminals => 0, ranking_method => 'high_rule_only'} );
 
 $recce->show_progress();
 
