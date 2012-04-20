@@ -5,6 +5,15 @@ use Marpa::XS;
 use List::MoreUtils qw(firstidx);
 use Data::Dumper;
 
+sub readprint {
+	my $r = shift;
+	my $tok = shift;
+	my $val = shift;
+	#print STDERR "$tok: $val\n";
+	$r->read($tok,$val);
+}
+
+my $comment = 0;
 sub lexer {
 	my $rec = shift;
 	my $line = shift;
@@ -14,41 +23,59 @@ sub lexer {
 	$line =~ s|/\*[\s\S]*\*/||g;
 	while($line ne '') {
 		$line =~ s/^\s//;
+		if($line =~ s|^/\*||) {
+			$comment = 1;
+		}
+		if($line =~ s|^\*/||) {
+			$comment = 0;
+		}
 		if($line =~ s/^(\[)//) {
-			$rec->read('lbracket',$1);
+			readprint($rec,'lbracket',$1) unless $comment;
 			redo;
 		}
 		if($line =~ s/^(\])//) {
-			$rec->read('rbracket',$1);
+			readprint($rec,'rbracket',$1) unless $comment;
 			redo;
 		}
 		if($line =~ s/^(,)//) {
-			$rec->read('comma',$1);
+			readprint($rec,'comma',$1) unless $comment;
+			redo;
+		}
+		if($line =~ s/^(->|\+\+|--|##|<<|>>|!=|<=|>=|==|&&|\|\||\*=|\/=|\%=|\+=|-=|<<=|>>=|&=|\^=|\|=|<:|:>|<\%|\%>|\%:|\%:\%:)//) {
+			readprint($rec,$1,$1) unless $comment;
+			redo;
+		}
+		if($line =~ s/^(".*?")//) {
+			readprint($rec,'string',$1) unless $comment;
+			redo;
+		}
+		if($line =~ s/^('[A-Za-z]')//) {
+			readprint($rec,'char_const',$1) unless $comment;
 			redo;
 		}
 		if($line =~ s/^(\W)//) {
-			$rec->read($1,$1);
+			readprint($rec,$1,$1) unless $comment;
+			redo;
 		}
 		if($line =~ s/^(\d+(\.\d+))//) {
-			$rec->read('float_const',$1);
+			readprint($rec,'float_const',$1) unless $comment;
+			redo;
 		}
-		if($line =~ s/^(\d+)//) {
-			$rec->read('int_const',$1);
+		if($line =~ s/^(0x[0-9A-Fa-f]+)[UL]*//) {
+			readprint($rec,'int_const',$1) unless $comment;
+			redo;
 		}
-		if($line =~ s/^(enum)//) {
-			$rec->read($1,$1);
+		if($line =~ s/^(\d+)[UL]*//) {
+			readprint($rec,'int_const',$1) unless $comment;
+			redo;
 		}
-		if($line =~ s/^(struct|union)//) {
-			$rec->read('struct_or_union',$1);
-		}
-		if($line =~ s/^(const|volatile)//) {
-			$rec->read('type_qualifier',$1);
-		}
-		if($line =~ s/^(void|char|short|int(?:\w+_t)?|long|float|double|signed|unsigned)//) {
-			$rec->read('type_spec',$1);
+		if($line =~ s/^(auto|break|case|char|const|continue|default|do|double|else|enum|extern|float|for|goto|if|int\b|long|register|return|short|signed|sizeof|static|struct|switch|typedef|union|unsigned|void|volatile|while|_Bool|_Complex|_Imaginary|inline|restrict)//) {
+			readprint($rec,$1,$1) unless $comment;
+			redo;
 		}
 		if($line =~ s/^(\w+)//) {
-			$rec->read('id',$1);
+			readprint($rec,'id',$1) unless $comment;
+			redo;
 		}
 	}
 }
@@ -78,6 +105,7 @@ sub action::circular_sequence {
 	return \@list;
 }
 
+my %types;
 my %unnamed = ( enum => 0, struct => 0, union => 0 );
 sub action::struct_or_union_spec {
 	shift;
@@ -92,6 +120,7 @@ sub action::struct_or_union_spec {
 		$name = "unnamed_$type$unnamed{$type}";
 		++$unnamed{$type};
 	}
+	$types{$type}{$name} = { $type => $name, elements => $_[$brace+1] };
 	return { $type => $name, elements => $_[$brace+1] };
 }
 
@@ -201,6 +230,7 @@ my $rules = [{ lhs => 'translation_unit', rhs => [qw/external_decl/], action => 
          { lhs => 'type_spec', rhs => [qw/typedef_name/], },
          { lhs => 'type_qualifier', rhs => [qw/const/], },
          { lhs => 'type_qualifier', rhs => [qw/volatile/], },
+         { lhs => 'type_qualifier', rhs => [qw/restrict/], },
          { lhs => 'struct_or_union_spec', rhs => [qw/struct_or_union id { struct_decl_list }/], },
          { lhs => 'struct_or_union_spec', rhs => [qw/struct_or_union { struct_decl_list }/], },
          { lhs => 'struct_or_union_spec', rhs => [qw/struct_or_union id/], },
@@ -388,6 +418,8 @@ $grammar->precompute();
 
 my $recce = Marpa::XS::Recognizer->new( { grammar => $grammar, trace_terminals => 0} );
 
+$recce->show_progress();
+
 while(<>) {
 	lexer($recce,$_);
 }
@@ -396,7 +428,7 @@ my $value_ref = $recce->value;
 my $value = $value_ref ? ${$value_ref} : 'No Parse';
 
 #$Data::Dumper::Indent = 2;
-print Dumper($value);
+print Dumper(\%types);
 
 # my %done;
 # for(@{$rules}) {
