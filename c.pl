@@ -41,7 +41,7 @@ sub lexer {
 			readprint($rec,'comma',$1) unless $comment;
 			redo;
 		}
-		if($line =~ s/^(->|\+\+|--|##|<<|>>|!=|<=|>=|==|&&|\|\||\*=|\/=|\%=|\+=|-=|<<=|>>=|&=|\^=|\|=|<:|:>|<\%|\%>|\%:|\%:\%:)//) {
+		if($line =~ s/^(->|\+\+|--|##|<<|>>|!=|<=|>=|==|&&|\|\||\*=|\/=|\%=|\+=|-=|<<=|>>=|&=|\^=|\|=|<:|:>|<\%|\%>|\%:|\%:\%:|\.\.\.)//) {
 			readprint($rec,$1,$1) unless $comment;
 			redo;
 		}
@@ -71,6 +71,10 @@ sub lexer {
 		}
 		if($line =~ s/^(auto|break|case|char|const|continue|default|do|double|else|enum|extern|float|for|goto|if|int|long|register|return|short|signed|sizeof|static|struct|switch|typedef|union|unsigned|void|volatile|while|inline|restrict)\b//) {
 			readprint($rec,$1,$1) unless $comment;
+			redo;
+		}
+		if($line =~ s/^(__restrict|__restrict__)\b//) {
+			readprint($rec,'restrict',$1) unless $comment;
 			redo;
 		}
 		if($line =~ s/^(\w+)//) {
@@ -114,7 +118,7 @@ sub action::struct_or_union_spec {
 	my $name = $_[$type+1];
 	$type = $_[$type];
 	if($brace == -1) {
-		return { $type => $name };
+		return { name => $name, type => $type };
 	}
 	if($name eq $_[$brace]) {
 		$name = "unnamed_$type$unnamed{$type}";
@@ -128,6 +132,7 @@ sub action::enum_spec {
 	action::struct_or_union_spec(@_);
 }
 
+my %enum_values;
 sub action::enumerator_list {
 	shift;
 	my $next = $_[0]->[1] || 0;
@@ -136,7 +141,13 @@ sub action::enumerator_list {
 		if(!defined($_->[1])) {
 			$_->[1] = $next;
 		}
-		$next = $_->[1]+1;
+		$enum_values{$_->[0]} = $next;
+		my $value = $_->[1];
+		if ($_->[1] ~~ /[A-Za-z]/) {
+			$value = $enum_values{$_->[1]};
+			$_->[1] = $value;
+		}
+		$next = $value+1;
 	}
 	return \@_;
 }
@@ -197,7 +208,9 @@ sub action::function_definition {
 sub action::typedefd_name {
 	shift;
 	if(ref $_[1] eq 'HASH') {
-		delete $types{$_[1]->{type}}{$_[1]->{name}};
+		if(defined($types{$_[1]->{type}}{$_[1]->{name}})) {
+			delete $types{$_[1]->{type}}{$_[1]->{name}};
+		}
 		$_[1]->{name} = $_[2][0];
 		$types{$_[1]->{type}}{$_[1]->{name}} = $_[1];
 	}
