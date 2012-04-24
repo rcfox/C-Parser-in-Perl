@@ -62,14 +62,14 @@ sub lexer {
 			redo;
 		}
 		if($line =~ s/^(0x[0-9A-Fa-f]+)[UL]*//) {
-			readprint($rec,'int_const',$1) unless $comment;
+			readprint($rec,'int_const',hex($1)) unless $comment;
 			redo;
 		}
 		if($line =~ s/^(\d+)[UL]*//) {
 			readprint($rec,'int_const',$1) unless $comment;
 			redo;
 		}
-		if($line =~ s/^(auto|break|case|char|const|continue|default|do|double|else|enum|extern|float|for|goto|if|int\b|long|register|return|short|signed|sizeof|static|struct|switch|typedef|union|unsigned|void|volatile|while|_Bool|_Complex|_Imaginary|inline|restrict)//) {
+		if($line =~ s/^(auto|break|case|char|const|continue|default|do|double|else|enum|extern|float|for|goto|if|int|long|register|return|short|signed|sizeof|static|struct|switch|typedef|union|unsigned|void|volatile|while|inline|restrict)\b//) {
 			readprint($rec,$1,$1) unless $comment;
 			redo;
 		}
@@ -196,8 +196,11 @@ sub action::function_definition {
 
 sub action::typedefd_name {
 	shift;
-	$_[1]->{name} = $_[2][0];
-	$types{$_[1]->{type}}{$_[1]->{name}} = $_[1];
+	if(ref $_[1] eq 'HASH') {
+		delete $types{$_[1]->{type}}{$_[1]->{name}};
+		$_[1]->{name} = $_[2][0];
+		$types{$_[1]->{type}}{$_[1]->{name}} = $_[1];
+	}
 	return $_[1];
 }
 
