@@ -41,7 +41,7 @@ sub lexer {
 			readprint($rec,'comma',$1) unless $comment;
 			redo;
 		}
-		if($line =~ s/^(->|\+\+|--|##|<<|>>|!=|<=|>=|==|&&|\|\||\*=|\/=|\%=|\+=|-=|<<=|>>=|&=|\^=|\|=|<:|:>|<\%|\%>|\%:|\%:\%:|\.\.\.)//) {
+		if($line =~ s/^(->|\+\+|--|##|<<=|>>=|<<|>>|!=|<=|>=|==|&&|\|\||\*=|\/=|\%=|\+=|-=|&=|\^=|\|=|<:|:>|<\%|\%>|\%:|\%:\%:|\.\.\.)//) {
 			readprint($rec,$1,$1) unless $comment;
 			redo;
 		}
@@ -49,7 +49,7 @@ sub lexer {
 			readprint($rec,'string',$1) unless $comment;
 			redo;
 		}
-		if($line =~ s/^('[A-Za-z]')//) {
+		if($line =~ s/^('.')//) {
 			readprint($rec,'char_const',$1) unless $comment;
 			redo;
 		}
